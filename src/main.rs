@@ -6,7 +6,9 @@ use mini_db::parser;
 
 fn main() {
 
-    let mut db = Database::new();
+    let path = "data.json";
+    let mut db = Database::new(path).expect("failed to initialize database");
+      
 
     loop {
         print!("mini_db> ");
@@ -34,6 +36,12 @@ fn handle_command(input: &str, db: &mut Database) -> bool {
 
         Ok(parser::Command::Select) => {
             let rows: &Vec<Row> = db.select_all();
+
+            if rows.len() == 0 {
+                println!("(no rows)");
+                return true;
+            }
+
             for row in rows.iter() {
                 println!("{:?}", row)
             }
@@ -41,11 +49,23 @@ fn handle_command(input: &str, db: &mut Database) -> bool {
         }, 
 
         Ok(parser::Command::Exit) => {
+            if let Err(e) = db.shutdown() {
+                println!("Warning: could not flush data: {}", e);
+            }
             println!("Exiting mini_db... Goodbye!");
             false
         },
+
         Ok(parser::Command::Help) => {
-            println!("\nAvailable commands:\ninsert <id> <name> <age>\nselect\nexit\n");
+            println!("\nAvailable commands:\ninsert <id> <name> <age>\nselect\nreset\nexit\n");
+            true
+        },
+
+        Ok(parser::Command::Reset) => {
+            match db.reset_db() {
+                Ok(_) => println!("All data cleared."),
+                Err(_) => println!("Database could not be reset."),
+            }
             true
         }
 

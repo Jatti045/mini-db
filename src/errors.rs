@@ -1,14 +1,20 @@
 use thiserror::Error;
 
 /// Defines our different possible errors
-#[derive(Error, Debug, PartialEq)]
+#[derive(Error, Debug)]
 pub enum DbError {
     #[error("Invalid command syntax")]
-    InvalidCommand,
+    InvalidCommandError,
     
     #[error("Duplicate id {0}")]
-    DuplicateId(u32),
+    DuplicateIdError(u32),
 
     #[error("Failed to parse input: {0}")]
     ParseError(String),
+
+    #[error("I/O error: {0}")]
+    IoError(#[from] std::io::Error),
+
+    #[error("Serialization error: {0}")]
+    SerializationError(#[from] serde_json::Error)
 }

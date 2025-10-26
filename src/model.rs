@@ -1,5 +1,5 @@
-
-#[derive(Debug, Clone, PartialEq)]
+use serde::{Serialize, Deserialize};
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 /// Defines each database row
 pub struct Row {
     pub id: u32,

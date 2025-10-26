@@ -11,6 +11,7 @@ pub enum Command {
     Select,
     Exit,
     Help,
+    Reset,
 }
 
 /// Parses user input and determines which command is to be executed
@@ -18,7 +19,7 @@ pub fn parse_command(input: &str) -> Result<Command, DbError> {
     let line = input.trim().to_lowercase();
 
     if line.is_empty() {
-        return Err(DbError::InvalidCommand);
+        return Err(DbError::InvalidCommandError);
     }
 
     // Split into tokens
@@ -28,7 +29,7 @@ pub fn parse_command(input: &str) -> Result<Command, DbError> {
     match cmd {
         "insert" => {
             if tokens.len() != 4 {
-                return Err(DbError::InvalidCommand);
+                return Err(DbError::InvalidCommandError);
             }
 
             // Parse id, name, age
@@ -47,7 +48,8 @@ pub fn parse_command(input: &str) -> Result<Command, DbError> {
         "select" => Ok(Command::Select),
         "exit" => Ok(Command::Exit),
         "help" => Ok(Command::Help),
-        _ => Err(DbError::InvalidCommand)
+        "reset" => Ok(Command::Reset),
+        _ => Err(DbError::InvalidCommandError)
     }
 
 }
