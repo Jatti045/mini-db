@@ -8,6 +8,12 @@ pub enum Command {
         name: String,
         age: u8,
     },
+    SelectById {
+        id: u32,
+    },
+    DeleteById {
+        id: u32,
+    },
     Select,
     Exit,
     Help,
@@ -44,8 +50,35 @@ pub fn parse_command(input: &str) -> Result<Command, DbError> {
             })?;
 
             Ok(Command::Insert{id, name, age}) 
+        },
+        "select" => {
+            if tokens.len() == 1 && tokens[0] == "select" {
+                return Ok(Command::Select);
+            } else if tokens.len() == 3 && tokens[1] == "where" && tokens[2].starts_with("id=") {
+                let id: u32 = match tokens[2].split("=").nth(1) {
+                Some(id) => id.parse().map_err(|_| {
+                    DbError::ParseError("Id not found".to_string())
+                })?,
+                    None => return Err(DbError::ParseError("Id not found".into()))
+                };
+                return Ok(Command::SelectById { id });
+            } else {
+                Err(DbError::InvalidCommandError)
+            }
+        },
+        "delete" => {
+             if tokens.len() == 3 && tokens[1] == "where" && tokens[2].starts_with("id=") {
+                let id: u32 = match tokens[2].split("=").nth(1) {
+                Some(id) => id.parse().map_err(|_| {
+                    DbError::ParseError("Id not found".to_string())
+                })?,
+                    None => return Err(DbError::ParseError("Id not found".into()))
+                };
+                return Ok(Command::DeleteById { id });
+            } else {
+                Err(DbError::InvalidCommandError)
+            }
         }
-        "select" => Ok(Command::Select),
         "exit" => Ok(Command::Exit),
         "help" => Ok(Command::Help),
         "reset" => Ok(Command::Reset),

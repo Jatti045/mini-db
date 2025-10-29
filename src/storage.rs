@@ -12,6 +12,9 @@ pub enum LogEntry {
     Insert {
         row: Row,
         timestamp: i64
+    },
+    Delete {
+        id: u32,
     }
 }
 
@@ -85,6 +88,7 @@ impl Storage {
             // Deserialize each line and append to row
             match serde_json::from_str(&line) {
                 Ok(LogEntry::Insert {row, timestamp}) => rows.push(row),
+                _ => {},
                 Err(e) => {
                     eprintln!("Warning: could not parse line {}: {}", line_num + 1, e);
                     

@@ -34,6 +34,18 @@ fn handle_command(input: &str, db: &mut Database) -> bool {
             true
         },
 
+        Ok(parser::Command::SelectById { id }) => {
+            match db.select_by_id(id) {
+                Ok(Some(row)) => println!("{:?}", row),
+                _ => eprintln!("Error fetching row by id")
+            }
+            true
+        },
+
+        Ok(parser::Command::DeleteById { id }) => {
+            true
+        },
+
         Ok(parser::Command::Select) => {
             let rows: &Vec<Row> = db.select_all();
 

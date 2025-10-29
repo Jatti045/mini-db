@@ -61,4 +61,20 @@ impl Database {
 
         Ok(())
     }
+
+    /// Deletes row by id
+    pub fn delete_by_id(&mut self, id: u32) -> Result<bool, DbError> {
+        if let Some(pos) = self.rows.iter().position(|row| row.id == id) {
+            self.rows.remove(pos);
+            return Ok(true)
+        }
+        Ok(false)
+    }
+
+    /// Selects row by id
+    pub fn select_by_id(&self, id: u32) -> Result<Option<Row>, DbError> {
+        let rows = &self.rows;
+
+        Ok(rows.iter().find(|row| row.id == id).cloned())
+    }
 }
