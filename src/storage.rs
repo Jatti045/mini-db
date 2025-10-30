@@ -18,7 +18,7 @@ pub enum LogEntry {
     }
 }
 
-// Defines our storage
+/// Defines our storage
 pub struct Storage {
     // Storage path
     pub path: PathBuf,
@@ -26,7 +26,7 @@ pub struct Storage {
 }
 
 impl Storage {
-    // Initializes storage at path
+    /// Initializes storage at path
     pub fn new(path: impl AsRef<Path>) -> Result<Self, DbError> {
         let path = path.as_ref().to_path_buf();
 
@@ -42,7 +42,7 @@ impl Storage {
         })
     }
 
-    // Adds new entry to our storage
+    /// Adds new entry to our storage
     pub fn append_entry(&mut self, row: &Row) -> Result<(), DbError> {
         let log_entry = LogEntry::Insert {
             row: row.clone(),
@@ -58,7 +58,20 @@ impl Storage {
         Ok(())
     } 
 
-    // Loads all data from storage 
+    pub fn append_delete(&mut self, id:u32) -> Result<(), DbError> {
+        let log_entry = LogEntry::Delete { id };
+
+        // Serialize row into json string format
+        let json = serde_json::to_string(&log_entry)?;
+
+        // Write json to file with new line appended at end
+        writeln!(self.file, "{}", json)?;
+
+        Ok(())
+    }
+
+
+    /// Loads all data from storage 
     pub fn load_all(&self) -> Result<Vec<Row>, DbError> {
         let path = &self.path;
 
@@ -88,7 +101,7 @@ impl Storage {
             // Deserialize each line and append to row
             match serde_json::from_str(&line) {
                 Ok(LogEntry::Insert {row, timestamp}) => rows.push(row),
-                _ => {},
+                Ok(LogEntry:: Delete { id }) => rows.retain(|r| r.id != id),
                 Err(e) => {
                     eprintln!("Warning: could not parse line {}: {}", line_num + 1, e);
                     

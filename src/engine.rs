@@ -1,6 +1,6 @@
 use fs_err::File;
 
-use crate::model::Row;
+use crate::{model::Row, storage::LogEntry};
 use crate::errors::DbError;
 use crate::storage::Storage;
 use std::path::{Path};
@@ -65,6 +65,7 @@ impl Database {
     /// Deletes row by id
     pub fn delete_by_id(&mut self, id: u32) -> Result<bool, DbError> {
         if let Some(pos) = self.rows.iter().position(|row| row.id == id) {
+            self.storage.append_delete(id)?;
             self.rows.remove(pos);
             return Ok(true)
         }

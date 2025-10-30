@@ -37,12 +37,18 @@ fn handle_command(input: &str, db: &mut Database) -> bool {
         Ok(parser::Command::SelectById { id }) => {
             match db.select_by_id(id) {
                 Ok(Some(row)) => println!("{:?}", row),
-                _ => eprintln!("Error fetching row by id")
+                Ok(None) => println!("Row with id {} not found.", id),
+                Err(e) => eprintln!("Error fetching row by id: {}", e)
             }
             true
         },
 
         Ok(parser::Command::DeleteById { id }) => {
+            match db.delete_by_id(id) {
+                Ok(true) => println!("Row with id {} deleted.", id),
+                Ok(false) => println!("No row found with id {}.", id),
+                Err(e)    => eprintln!("Error deleting row: {}", e),
+            }   
             true
         },
 
