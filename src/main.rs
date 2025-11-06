@@ -1,11 +1,11 @@
 use std::io::{self, Write};
-use mini_db::engine::Database;
+use mini_db::engine::{DatabaseHandle};
 use mini_db::parser::handle_command;
 
 fn main() {
 
-    let path = "data.json";
-    let mut db = Database::new(path).expect("failed to initialize database");
+    let path = "mini_db.snapshot";
+    let db = DatabaseHandle::new(path).expect("Failed to initialize db.");
       
 
     loop {
@@ -15,7 +15,7 @@ fn main() {
         let mut input = String::new();
         std::io::stdin().read_line(&mut input).unwrap();
         
-        if !handle_command(&input, &mut db) {
+        if !handle_command(&input, &db) {
             break;
         }
     }

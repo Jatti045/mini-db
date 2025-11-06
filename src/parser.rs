@@ -15,7 +15,7 @@
 //! - `EXIT` - Shutdown and exit
 
 use std::path::{PathBuf};
-use crate::engine::Database;
+use crate::engine::{DatabaseHandle};
 use crate::model::Row;
 use crate::errors::DbError;
 
@@ -47,6 +47,8 @@ pub enum Command {
     Select,
     /// Exit the program
     Exit,
+    /// Compact the database to reduce size
+    Compact,
     /// Display help information
     Help,
     /// Reset (clear) the entire database
@@ -144,6 +146,7 @@ pub fn parse_command(input: &str) -> Result<Command, DbError> {
             }
         }
         "exit" => Ok(Command::Exit),
+        "compact" => Ok(Command::Compact),
         "help" => Ok(Command::Help),
         "reset" => Ok(Command::Reset),
         _ => Err(DbError::InvalidCommandError)
@@ -178,7 +181,7 @@ pub fn parse_command(input: &str) -> Result<Command, DbError> {
 /// let should_continue = handle_command("INSERT 1 Alice 30", &mut db);
 /// # Ok::<(), mini_db::errors::DbError>(())
 /// ```
-pub fn handle_command(input: &str, db: &mut Database) -> bool {
+pub fn handle_command(input: &str, db: &DatabaseHandle) -> bool {
     match parse_command(input) {
         Ok(Command::Insert {id, name, age}) => {
             match db.insert(id, name, age) {
@@ -215,7 +218,7 @@ pub fn handle_command(input: &str, db: &mut Database) -> bool {
         },
 
         Ok(Command::Select) => {
-            let rows: &Vec<Row> = db.select_all();
+            let rows: Vec<Row> = db.select_all();
 
             if rows.len() == 0 {
                 println!("(no rows)");
@@ -236,8 +239,16 @@ pub fn handle_command(input: &str, db: &mut Database) -> bool {
             false
         },
 
+        Ok(Command::Compact) => {
+            match db.compact() {
+                Ok(()) => println!("Database compacted successfully."),
+                Err(e) => println!("Error compacting database: {}", e)
+            }
+            true
+        }
+
         Ok(Command::Help) => {
-            println!("\nAvailable commands:\nEXEC BATCH <FILEPATH.TXT>\nINSERT <ID> <NAME> <AGE>\nSELECT\nSELECT WHERE ID=<ID>\nDELETE WHERE ID=<ID>\nRESET\nEXIT\n");
+            println!("\nAvailable commands:\nEXEC BATCH <FILEPATH.TXT>\nINSERT <ID> <NAME> <AGE>\nSELECT\nSELECT WHERE ID=<ID>\nDELETE WHERE ID=<ID>\nCOMPACT\nRESET\nEXIT\n");
             true
         },
 

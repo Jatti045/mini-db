@@ -13,7 +13,7 @@
 
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
-use std::fs::{File, OpenOptions};
+use std::fs::{self, File, OpenOptions};
 use serde::{Serialize, Deserialize};
 use chrono::Utc;
 
@@ -69,11 +69,12 @@ impl Storage {
     /// ```no_run
     /// use mini_db::storage::Storage;
     ///
-    /// let storage = Storage::new("data.json")?;
+    /// let storage = Storage::new("mini_db.log")?;
     /// # Ok::<(), mini_db::errors::DbError>(())
     /// ```
     pub fn new(path: impl AsRef<Path>) -> Result<Self, DbError> {
-        let path = path.as_ref().to_path_buf();
+        let dir_path = PathBuf::from("data");
+        let path = dir_path.join(path.as_ref());
 
         // Open file in append mode, creating it if it doesn't exist
         let file = OpenOptions::new()
@@ -216,7 +217,7 @@ impl Storage {
     ///
     /// ```no_run
     /// # use mini_db::storage::Storage;
-    /// # let mut storage = Storage::new("data.json")?;
+    /// # let mut storage = Storage::new("mini_db.log")?;
     /// // After important operations, ensure durability
     /// storage.flush()?;
     /// # Ok::<(), mini_db::errors::DbError>(())
@@ -226,7 +227,51 @@ impl Storage {
         self.file.sync_all()?;
 
         Ok(())
+    }  
+
+    pub fn snapshot_write(&self, rows: &[Row], path: &Path) -> Result<(), DbError> {
+        let snapshot_path = path.join("mini_db.snapshot");
+        let tmp_path = path.join("mini_db.snapshot.tmp");
+
+        let serialized = serde_json::to_string(rows)?;
+
+        let mut tmp_file = OpenOptions::new()
+                                                .create(true)
+                                                .truncate(true)
+                                                .write(true)
+                                                .open(&tmp_path)?;
+
+        tmp_file.write_all(serialized.as_bytes())?;
+        tmp_file.flush()?;
+        tmp_file.sync_all()?;
+
+        fs::rename(tmp_path, &snapshot_path)?;
+
+        Ok(())
+                                            
     }   
+
+    pub fn snapshot_read(&self, path: &Path) -> Result<Vec<Row>, DbError> {
+        let file = File::open(path)?;
+        let reader = BufReader::new(file);
+
+        let rows: Vec<Row> = serde_json::from_reader(reader)?;
+
+        Ok(rows)
+    }
+
+    pub fn log_truncate(&self, path: &Path) -> Result<(), DbError> {
+        let mut file = OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(true)
+            .open(path)?;
+        
+        file.flush()?;
+        file.sync_all()?;
+        
+        Ok(())
+    }
 }
 
 

@@ -7,6 +7,7 @@
 //! - CRUD operations (Create, Read, Update, Delete)
 
 use fs_err::File;
+use parking_lot::RwLock;
 
 use crate::parser;
 use crate::{index::IdIndex, model::Row};
@@ -15,6 +16,7 @@ use crate::storage::Storage;
 use std::fs;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 /// The main database structure that manages all database operations.
 ///
@@ -30,6 +32,59 @@ pub struct Database {
     index: IdIndex,
     /// Storage backend for persisting operations to disk
     storage: Storage,
+}
+
+pub struct DatabaseHandle {
+    inner: Arc<RwLock<Database>>,
+}
+
+impl DatabaseHandle {
+    pub fn new(path: impl AsRef<Path>) -> Result<Self, DbError> {
+        let db = Database::new(&path)?;
+        Ok(Self {
+            inner: Arc::new(RwLock::new(db))
+        })
+    }
+
+    pub fn insert(&self, id: u32, name: String, age: u8) -> Result<(), DbError> {
+        let mut db = self.inner.write();
+        db.insert(id, name, age)
+    }
+
+    pub fn delete_by_id(&self, id: u32) -> Result<bool, DbError> {
+        let mut db = self.inner.write();
+        db.delete_by_id(id)
+    }
+
+    pub fn compact(&self) -> Result<(), DbError> {
+        let mut db = self.inner.write();
+        db.compact()
+    }
+
+    pub fn select_by_id(&self, id: u32) -> Result<Option<Row>, DbError> {
+        let db = self.inner.read();
+        db.select_by_id(id)
+    }
+
+    pub fn select_all(&self) -> Vec<Row>{
+        let db = self.inner.read();
+        db.select_all().clone()
+    }
+
+    pub fn exec_batch(&self, path: PathBuf) -> Result<(), DbError> {
+        let db = self.inner.write();
+        db.exec_batch(path)
+    } 
+
+    pub fn shutdown(&self) -> Result<(), DbError> {
+        let mut db = self.inner.write();
+        db.shutdown()
+    }
+
+    pub fn reset_db(&self) -> Result<(), DbError> {
+        let mut db = self.inner.write();
+        db.reset_db()
+    }
 }
 
 impl Database {
@@ -51,11 +106,18 @@ impl Database {
     /// ```no_run
     /// use mini_db::engine::Database;
     ///
-    /// let db = Database::new("data.json")?;
+    /// let db = Database::new("data/mini_db.log")?;
     /// # Ok::<(), mini_db::errors::DbError>(())
     /// ```
-    pub fn new(path: impl AsRef<Path>) -> Result<Self, DbError> {
-        let storage = Storage::new(path)?;
+     pub fn new(path: impl AsRef<Path>) -> Result<Self, DbError> {
+        let dir_path = PathBuf::from("data");
+        let snapshot_path = dir_path.join(path.as_ref());
+
+        if snapshot_path.exists() {
+            return Self::load_from_disk(&snapshot_path);
+        }
+
+        let storage = Storage::new(path.as_ref())?;
         let rows = storage.load_all()?;
         let index = IdIndex::rebuild(&rows);
 
@@ -64,7 +126,29 @@ impl Database {
             index,
             storage,
         })
-    }
+    } 
+
+   pub fn load_from_disk(path: impl AsRef<Path>) -> Result<Self, DbError> {
+        let snapshot_path = path.as_ref();
+        let storage_path = "mini_db.log";
+
+        let storage = Storage::new(storage_path)?;
+        let mut rows = match storage.snapshot_read(&snapshot_path) {
+            Ok(rows) => rows,
+            Err(_) => Vec::new(),
+        };
+
+        let mut log_rows = storage.load_all()?;
+        rows.append(&mut log_rows);
+
+        let index = IdIndex::rebuild(&rows);
+
+        Ok(Self {
+            rows,
+            index,
+            storage,
+        })    
+   }
 
     /// Inserts a new row into the database.
     ///
@@ -84,7 +168,7 @@ impl Database {
     ///
     /// ```no_run
     /// # use mini_db::engine::Database;
-    /// # let mut db = Database::new("data.json")?;
+    /// # let mut db = Database::new("mini_db.log")?;
     /// db.insert(1, "Alice".to_string(), 30)?;
     /// # Ok::<(), mini_db::errors::DbError>(())
     /// ```
@@ -116,17 +200,22 @@ impl Database {
     /// - The file does not exist
     /// - There are I/O errors reading the file
     /// - Any command in the batch fails
-    pub fn exec_batch(&mut self, path: PathBuf) -> Result<(), DbError> {
+    pub fn exec_batch(&self, path: PathBuf) -> Result<(), DbError> {
         if !path.exists() {
-            return Err(DbError::InvalidCommandError);
+            return Err(DbError::IoError(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                format!("Batch file not found: {}", path.display())
+            )));
         }
 
-        let file = fs::File::open(path)?;
+        let file = fs::File::open(&path)?;
         let reader = BufReader::new(file);
+
+        let path = "mini_db.snapshot";
         
         for line in reader.lines() {
             let line = line?;
-            parser::handle_command(&line, self);
+            parser::handle_command(&line, &DatabaseHandle::new(path)?);
         }
 
         Ok(())
@@ -143,7 +232,7 @@ impl Database {
     ///
     /// ```no_run
     /// # use mini_db::engine::Database;
-    /// # let db = Database::new("data.json")?;
+    /// # let db = Database::new("mini_db.log")?;
     /// let all_rows = db.select_all();
     /// println!("Total rows: {}", all_rows.len());
     /// # Ok::<(), mini_db::errors::DbError>(())
@@ -203,7 +292,7 @@ impl Database {
     ///
     /// ```no_run
     /// # use mini_db::engine::Database;
-    /// # let mut db = Database::new("data.json")?;
+    /// # let mut db = Database::new("mini_db.log")?;
     /// # db.insert(1, "Alice".to_string(), 30)?;
     /// let deleted = db.delete_by_id(1)?;
     /// assert!(deleted);
@@ -239,7 +328,7 @@ impl Database {
     ///
     /// ```no_run
     /// # use mini_db::engine::Database;
-    /// # let db = Database::new("data.json")?;
+    /// # let db = Database::new("mini_db.log")?;
     /// if let Some(row) = db.select_by_id(1)? {
     ///     println!("Found: {} (age {})", row.name, row.age);
     /// }
@@ -266,5 +355,21 @@ impl Database {
     /// Returns `Some(position)` if the ID exists in the index, `None` otherwise.
     pub fn get_index_position(&self, id: u32) -> Option<usize> {
         self.index.get(id)
+    }
+
+    pub fn should_compact(&self) -> bool {
+        // Compacts every 50k rows 
+        self.rows.len() >= 50_000 && self.rows.len() % 50_000 == 0
+    }
+
+    pub fn compact(&mut self) -> Result<(), DbError> {
+        let data_dir = PathBuf::from("data");
+
+        self.storage.snapshot_write(&self.rows, &data_dir)?;
+
+        let log_path = PathBuf::from("data/mini_db.log");
+        self.storage.log_truncate(&log_path)?;
+
+        Ok(())
     }
 }
